@@ -1,3 +1,4 @@
+/* 정규화된 문자열에서 데이터 추출하여 배열에 저장하기 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
