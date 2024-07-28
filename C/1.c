@@ -3,16 +3,8 @@
 #include <string.h>
 
 int main() {
-	iii
-	n
-
-	ffiji;dfs
-	fsdkji
-
-	}
 	
-	
-const char* lines[] = {
+	const char* lines[] = {
         "[SUM]   0.00-0.19   sec  0.00 Bytes  0.00 bits/sec", 
         "[SUM]   0.19-0.21   sec  0.00 Bytes  1.00 Gbits/sec", 
         "[SUM]   0.21-0.31   sec  1.12 MBytes  91.8 Mbits/sec", 
@@ -24,24 +16,25 @@ const char* lines[] = {
         "[Total]   0.00-10.03  sec   897 MBytes   750 Mbits/sec", 
         "[Total]   0.00-10.01  sec   890 MBytes   746 Mbits/sec"
     };
+	double datas[4][10];
+	char units[2][10];
+	int i;
 
-    for (int i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
-        const char* line = lines[i];
-        if (strncmp(line, "[SUM]", 5) == 0) {
-            double startTime, endTime, byteSize, bitRate;
-            char byteUnit[10], bitUnit[10];
-
+    for (i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
+		const char* line = lines[i];
+        //if (strncmp(line, "[SUM]", 5) == 0) {
             // Parsing the line
-            sscanf(line, "[SUM] %lf-%lf sec %lf %sBytes %lf %sbits/sec", &startTime, &endTime, &byteSize, byteUnit, &bitRate, bitUnit);
-
             // Printing the parsed values
-            printf("Parsed from line: %s\n", line);
-            printf("Start Time: %.2f\n", startTime);
-            printf("End Time: %.2f\n", endTime);
-            printf("Byte Size: %.2f %sBytes\n", byteSize, byteUnit);
-            printf("Bit Rate: %.2f %sbits/sec\n\n", bitRate, bitUnit);
-        }
-    }
+            sscanf(line, "[SUM] %lf-%lf sec %lf %cBytes %lf %cbits/sec", &datas[0][i], &datas[1][i], &datas[2][i], &units[0][i], &datas[3][i], &units[1][i]);
+            sscanf(line, "[Total] %lf-%lf sec %lf %cBytes %lf %cbits/sec", &datas[0][i], &datas[1][i], &datas[2][i], &units[0][i], &datas[3][i], &units[1][i]);
+            printf("Parsed from line: %s, i= %d \n", line, i);
+      	//}
+	}
+
+	printf("\ndata[i] | startTime | endTime | byteSeze | byteUnit | bitRate | bitUnit\n");
+	for (i=0; i<sizeof(lines) / sizeof(lines[0]); i++){
+		printf("    %d   |   %2.2f   |  %2.2f  |  %2.2f   |     %c    |  %.2f |  %c\n", i, datas[0][i], datas[1][i], datas[2][i], units[0][i], datas[3][i], units[1][i]);
+	}
 
     return 0;
 }
