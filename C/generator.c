@@ -70,9 +70,19 @@ int load_csv(){
 	char line[1024];	// 한줄을 저장할 버퍼
 	while (fgets(line, sizeof(line), fp)) {
 		// 줄 끝의 개행 문자 제거
-		line[strcspn(line, "\n")]= 0;
+		/* size_t strcspn(const char *str1, const char *str2);
+			문자열 str1에서 문자들의 집합 str2가 처음 등장하는 위치를 찾고, 문자가 나올때 까지의 길이를 반환
+		*/
+		line[strcspn(line, "\n")] = 0;
 
 		// 쉼표로 구분된 각 값을 처리
+		/* char *strtok(chat *str, const char *delim);
+			문자열을 구분자를 사용하여 토큰 단위로 분리하는 함수
+			첫 호출에서 문자열과 구분자를 전달하고, 이후에는 NULL을 전달하여 남는 연을 계속 분리
+			str : 분리할 대상 문자열. 첫 호출에서 전달하지만 이후에는 NULL을 전달하여 문자열을 이어서 처리함
+			delim : 구분자, 여기 있는 문자 중 하나라도 만나면 분리
+			반환값 : 분리된 토큰(문자열의 일부), 더 이상 구분자가 없으면 NULL 반환
+		*/
 		char *token = strtok(line, ",");
 		while(token != NULL){
 			printf("%s ", token);	// 쉼표로 구분된 각 값을 출력
