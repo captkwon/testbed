@@ -5,19 +5,76 @@
 #include "str_alloc.h"
 #define HEX_SET "0123456789ABCDEF"
 
+#define SN 12
+#define ICCID 19
+#define IMSI 32
+#define K 32
+#define OPc 32
+#define ICCID_HDR "89820020"
+
 char** input_func(int *, int *);
 char** initialized(char **str, int, int);
-char** mk_sn(char **str, int, int);
+char** fill_sn(char **str, int, int);
 void show_arr(char **str, int, int);
 int mk_csv(char **str, int, int);
 int load_csv();
 
+//============ 함수 재선언
+
+void comp_arr(char**, char**, int, int, int);
+char** gen_iccid(char**, char**, int, int);
+int get_addr(int, int*, int*);
+char** chg_value(char**, int, int);
+char** mk_sn(char**, int, int);
+char** set_sn(char** , int , int);
+char** init_arr(char** , int, int);
+char** arr_gen(char**, char*, int, int);
+//========================
 int main(){
 	int i;
 	int length, count;
 	short action;
 	char** numbers;
 
+//=========== 코드 효율화
+
+	char **sn, **iccid, **imsi, **k, **opc;
+	// 자료 생성 - arr_gen() 으로 배열, 이름, 길이, 개수 전달
+	printf("SIM 몇 개를 만들겠습니까? ");
+	scanf("%d", &count);
+	printf("SIM card 정보 %d개를 생성합니다.\n", count);
+	count++;
+
+	sn = arr_gen(sn, "[S/N No]", SN, count);
+	iccid = arr_gen(iccid, "[ ICCID ]", ICCID, count);
+	imsi = arr_gen(imsi, "[ IMSI ]", IMSI, count);
+	k = arr_gen(k, "[  K  ]", K, count);
+	opc = arr_gen(opc, "[  OPc  ]", OPc, count);
+	if ( sn == NULL || iccid == NULL || imsi == NULL || k == NULL || opc == NULL ){
+		printf("배열 생성에 실패했습니다");
+		return 1;
+	}
+
+	sn = set_sn(sn, SN, count);
+	show_arr(sn, SN, count);
+	printf("S/N이 입력되었습니다. ICCID를 생성합니다.");
+	iccid = gen_iccid(sn, iccid, ICCID, count);
+
+
+
+
+
+
+
+
+
+	//show_arr(iccid, ICCID, count);
+	//show_arr(imsi, IMSI, count);
+	//show_arr(k, K, count);
+	//show_arr(opc, OPc, count);
+
+//===============기존 코드=========
+/*
 	// 데이터 입력 부분 (문자열 길이와 개수를 인자로 전달하고 문자열배열 반환
 	numbers = input_func(&length, &count);
 	if (numbers == NULL){
@@ -57,8 +114,205 @@ int main(){
 
 	// 사용한 메모리 해제
 	free_str_array(numbers, length, count);
+*/
+	free_str_array(sn, SN, count);
+	free_str_array(iccid, ICCID, count);
+	free_str_array(imsi, IMSI, count);
+	free_str_array(k, K, count);
+	free_str_array(opc, OPc, count);
 	return 0;
 }
+
+
+// ========== 함수 효율화
+// 2개 비교해서 표출하는 함수
+void comp_arr(char** str1, char** str2, int len1 , int len2, int cnt){
+	char index[50] = "1234567890123456789012345678901234567890";
+	printf("\n       ");	// S/N 출력
+	for (int j = 0; j < SN ; j++){
+		printf("%c", index[j]);
+	}
+	printf("\t");	// ICCID 출력
+	for (int j = 0 ; j < len2 ; j++){
+		printf("%c", index[j]);
+	}
+	printf("\n");
+	for (int i = 0; i < cnt ; i++){
+		printf("%5d: %s\t%s\n", i, str1[i], str2[i]);
+	}
+	str2 = chg_value(str2, len2, cnt);
+
+}
+
+// ICCID 생성함수
+char** gen_iccid(char** sn, char** str, int len, int cnt){
+	int i, j;
+
+	for (i=1; i<cnt; i++){
+		for( j=0 ; j< ICCID-1 ; j++){	// 시작값 898200 20 할당
+			if(j <8){
+				str[i][j] = ICCID_HDR[j];
+			} else {
+				str[i][j] = sn[i][j-6];
+			}
+			str[i][ICCID-1] = '\0';
+		}
+	}
+
+	comp_arr(sn, str, SN, len, cnt);
+	// Check Digit 할당
+
+	return str;
+}
+// 에러없이 끝나는 자릿수 확인
+
+int get_addr(int len, int *size, int *end){
+	int start;
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("변경값의 시작 위치를 입력하세요");	// 시작자리를 start에 입력
+		scanf("%d", &start);
+	} while ( start < 1 || start > len );
+	
+	do{
+		printf("문자 길이를 입력하세요");	// 일련번호 자릿수를 size에 입력(인덱스+1)
+		scanf("%d", size); 
+	} while ( *size < 1 );
+	*end = start + *size -1;
+	if ( *end > len){	// 끝나는 자리가 length보다 크면
+		*end = len; // 끝자리를 length로 고정
+		*size = *end - start +1;	// 따라서 사이즈도 수정
+	}
+	return start;
+}
+
+// 고정값으로 대치
+char** chg_value(char**str, int len, int cnt){
+	char* temp;
+	int start, size, end;
+	unsigned int no;
+	int i, j;
+
+	start = get_addr(len, &size, &end);	// start, end, size 확인
+	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+	if (temp == NULL)	return NULL;
+	printf("선택한 자리를 특정 문자열로 대치합니다\n");
+	printf("문자열을 입력하세요");
+	while (getchar() != '\n');
+	scanf("%s", temp);
+	if (strlen(temp) < size){ // temp가 size보다 작으면
+		for(i=0, j=strlen(temp); j < size ; i++, j++){
+			temp[j] = temp[i];
+		}
+		temp[size] = '\0';
+	}
+	for (i=1; i<cnt; i++){	// 제목열 제거
+		for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+			str[i][j] = temp[j-start+1];
+		}
+	}
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+
+	return str;
+}
+
+// 일련번호 생성함수
+char** fill_sn(char**str, int len, int cnt){
+	char* temp;
+	int start, size, end;
+	unsigned int no;
+	int i, j;
+	
+	while(getchar() != '\n');	// 하나의 문자를 반복 읽으면서 개행문자이면 버퍼를 비우고 종료
+	printf("일련번호 시작값을 입력하세요");
+	scanf("%d", &no);	// 큰 수 입력 대비 unsigned로 입력
+
+	start = get_addr(len, &size, &end);	// start, end, size 확인
+	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+	printf("선택한 %d 자리부터 일련번호로 대치합니다. 시작값을 입력하세요", start);
+	if (temp == NULL)	return NULL;
+
+	for (i=1; i<cnt; i++){	// 제목열 제거
+		snprintf(temp, size+1, "%0*d", size, no);
+		for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+			str[i][j] = temp[j-start+1];
+		}
+		no++;
+	}
+	free(temp);
+
+	return str;
+}
+// 시리얼 번호 세팅하기
+char** set_sn(char** str, int len, int cnt){
+	char* temp;
+	temp = str_alloc(len);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+	if (temp == NULL) return NULL;
+
+	printf("S/N 번호(%d 문자) 초기값을 입력하세요. : ", len);
+	while(getchar() != '\n');	// 하나의 문자를 반복 읽으면서 개행문자이면 버퍼를 비우고 종료
+	if( fgets(temp, len+1, stdin) != NULL) { 	// fgets로 \0포함 입력받고 null이 아니면
+		for (int i=0; i<len; i++){
+			if (temp[i] == '\n')	// 입력된 temp의 각 자리를 확인
+				temp[i] = '\0';		// \n(엔터)가 입력되었으면 그자리를 종료로
+			if (temp[i] == '\0')	// 입력이 종료이면
+				temp[i] = '_';	// 그자리를 '_'으로 채우기
+		}
+		temp[len] = '\0';	// length +1 번째 값은 종료문자
+	} else{
+		return NULL;	// 할당 실패시 NULL 반환
+	}
+	// 메모리 temp 해제
+	/*size = strlen(temp);
+	end = start + size -1;
+	if ( end > len){	// 끝나는 자리가 length보다 크면
+		end = len; // 끝자리를 length로 고정
+		size = end - start +1;	// 따라서 사이즈도 수정
+	}
+*/
+	for (int i=1; i<cnt ; i++){
+		strcpy(str[i], temp);
+	}
+	show_arr(str, len, cnt);
+	str = fill_sn(str, len, cnt);	// 일련번호 부여
+	show_arr(str, len, cnt);
+	// do-while()	
+	str = chg_value(str, len, cnt);
+
+	return str;
+}
+char** arr_gen(char **arr, char *name, int len, int cnt){
+	arr = str_array_alloc(len, cnt);
+	if (arr == NULL) return NULL;
+
+	// 첫 행 초기화
+	strcpy(arr[0], name);
+	for(int j = (int)strlen(arr[0]) ; j < len; j++){
+		arr[0][j] = '_';
+	}
+	arr[0][len] = '\0';
+	// 나머지행 초기화
+	arr = init_arr(arr, len, cnt);
+	if (arr == NULL ) return NULL;
+
+	return arr;
+}
+// 배열 초기화 함수
+char** init_arr(char **str, int len, int cnt){
+
+	for (int i=1; i < cnt; i++){	// 첫행은 제목임
+		for (int j=0; j < len ; j++){
+			str[i][j] = ' ';
+		}
+		str[i][len] = '\0';
+	}
+	return str;
+}
+
+
+//=====기존 함수========================
+
+
 // CSV 파일을 읽어오는 함수
 int load_csv(){
 	FILE *fp = fopen("list.csv", "r");
@@ -114,9 +368,13 @@ int mk_csv(char **str, int length, int count){
 
 // 입력한 데이터 확인하는 함수
 void show_arr(char **str, int length, int count){
-	printf("       %s\n", str[0]);
-	printf("       1234567890123456789012345678901234567890\n");
-	for (int i = 1; i < count ; i++){
+	char index[50] = "1234567890123456789012345678901234567890";
+	printf("\n       ");
+	for (int j = 0; j < length; j++){
+		printf("%c", index[j]);
+	}
+	printf("\n");
+	for (int i = 0; i < count ; i++){
 		printf("%5d: %s\n", i, str[i]);
 	}
 }
@@ -163,8 +421,8 @@ char** mk_sn(char **str, int length, int count){
 			printf("문자열을 입력하세요");
 			while (getchar() != '\n');
 			scanf("%s", temp);
-/* 이 블럭은 엔터치면 에러남 (fgets()는 \n도 입력)
-			if (fgets(temp, size+1, stdin) != NULL ){
+/* 이 블럭은 엔터치면 에러남 (ts()는 \n도 입력)
+			if (ts(temp, size+1, stdin) != NULL ){
 				printf("123456789012345678901234567890\n");
 				printf("%s 가 입력되었습니다\n", temp);
 			} else{
@@ -236,14 +494,14 @@ char** initialized(char **str, int length, int count){
 		if(temp ==NULL) return NULL;
 	printf("초기화할 값을 입력하세요");
 
-	/* fgets로 문자열 입력받기
-		형식 fgets(char *str, int size, FILE *stream);
+	/* ts로 문자열 입력받기
+		형식 ts(char *str, int size, FILE *stream);
 		- stream은 입력을 받을 스트림으로, stdin 을 사용하면 키보드 입력을 처리함
 		- size는 입력받을 최대 문자수로, \n이 포함되므로 실제 입력문자는 size -1임. 주로 sizeof(함수와 함께 사용)
 		- str은 입력을 저장할 문자 배열임
 		- 입력에 \n이 입력되면 그것도 문자열이며, 입력문자가 size-1이 되거나, \n을 만나면 입력을 종료함.
 		- 즉, 엔터만 치면 \n\0 을 str에 저장하고, str(실패시 NULL)을 반환 
-		getchar() 이용 입력 버퍼 처리하기
+		har() 이용 입력 버퍼 처리하기
 		- scanf()는 입력 후\n을 처리하지 않으므로, 버퍼의 문자 제거 필요
 */
 	while(getchar() != '\n');	// 하나의 문자를 반복 읽으면서 개행문자이면 버퍼를 비우고 종료
