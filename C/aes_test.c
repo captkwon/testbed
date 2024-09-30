@@ -18,7 +18,7 @@ void print_hex(const uint8_t* data, size_t length) {
 
 int main() {
     const char* op_hex = "01020304050607080910111213140000";
-    const char* k_hex = "300b000101112131415161718192a003";
+    const char* k_hex = "300b000101112131415161718192a001";
 
     uint8_t op[16];
     uint8_t k[16];
