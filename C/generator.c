@@ -1,16 +1,19 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "str_alloc.h"
+#include "tiny-AES-c/aes.h"
 #define HEX_SET "0123456789ABCDEF"
 
 #define SN 12
-#define ICCID 19
-#define IMSI 32
+#define ICCID 20
+#define IMSI 15
 #define K 32
 #define OPc 32
-#define ICCID_HDR "89820020"
+#define IIN "898299"	// Issuer Identification Number : SJ ?
+#define PLMN "45040"
 
 char** input_func(int *, int *);
 char** initialized(char **str, int, int);
@@ -20,13 +23,45 @@ int mk_csv(char **str, int, int);
 int load_csv();
 
 //============ 함수 재선언
-
+char luhn(char*);
 void comp_arr(char**, char**, int, int, int);
-char** gen_iccid(char**, char**, int, int);
-int get_addr(int, int*, int*);
+int get_addr_legacy(int, int*, int*);
 char** chg_value(char**, int, int);
 char** mk_sn(char**, int, int);
-char** set_sn(char** , int , int);
+///////// AES용 함수
+void hex_to_bytes(const char* hex, uint8_t* bytes, size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        sscanf(hex + 2 * i, "%2hhx", &bytes[i]);
+    }
+}
+
+void print_hex(const uint8_t* data, size_t length) {
+    for (size_t i = 0; i < length; i++) {
+        printf("%02X", data[i]);
+    }
+    printf("\n");
+}
+void store_hex(char* output, size_t output_size, const uint8_t* data, size_t length) {
+	size_t offset = 0;
+	for (size_t i=0; i<length ; i++){
+		offset += snprintf(output + offset, output_size - offset, "%02X", data[i]);
+		if( offset >= output_size){
+			break; 	// 만약 버퍼가 꽉 차면 중단
+		}
+	}
+}
+char** milenage(char**, int, int);
+
+char** mk_opc_info(char**, char**, int, int);
+char** mk_ki_info(char**,int, int);
+char** mk_imsi_info(char**, char**, int, int);
+char** mk_iccid_info(char**, char**, int, int);
+char** mk_sn_info(char** , int , int);
+char** edit_info(char**, int, int);
+	char** rep_random_value(char**, int, int);
+	char** rep_serial_value(char**, int, int);
+	char** rep_const_value(char**, int, int);
+		int get_index(int, int*, int*);
 char** init_arr(char** , int, int);
 char** arr_gen(char**, char*, int, int);
 //========================
@@ -38,8 +73,9 @@ int main(){
 
 //=========== 코드 효율화
 
-	char **sn, **iccid, **imsi, **k, **opc;
+	char **sn, **iccid, **imsi, **ki, **opc;
 	// 자료 생성 - arr_gen() 으로 배열, 이름, 길이, 개수 전달
+/*
 	printf("SIM 몇 개를 만들겠습니까? ");
 	scanf("%d", &count);
 	printf("SIM card 정보 %d개를 생성합니다.\n", count);
@@ -48,25 +84,29 @@ int main(){
 	sn = arr_gen(sn, "[S/N No]", SN, count);
 	iccid = arr_gen(iccid, "[ ICCID ]", ICCID, count);
 	imsi = arr_gen(imsi, "[ IMSI ]", IMSI, count);
-	k = arr_gen(k, "[  K  ]", K, count);
+	ki = arr_gen(ki, "[  K  ]", K, count);
 	opc = arr_gen(opc, "[  OPc  ]", OPc, count);
-	if ( sn == NULL || iccid == NULL || imsi == NULL || k == NULL || opc == NULL ){
+	if ( sn == NULL || iccid == NULL || imsi == NULL || ki == NULL || opc == NULL ){
 		printf("배열 생성에 실패했습니다");
 		return 1;
 	}
 
-	sn = set_sn(sn, SN, count);
-	show_arr(sn, SN, count);
-	printf("S/N이 입력되었습니다. ICCID를 생성합니다.");
-	iccid = gen_iccid(sn, iccid, ICCID, count);
+	sn = mk_sn_info(sn, SN, count);
+	iccid = mk_iccid_info(sn, iccid, ICCID, count);
+	imsi = mk_imsi_info(iccid, imsi, IMSI, count);
+	ki = mk_ki_info(ki, K, count);
+	opc = mk_opc_info(ki, opc, OPc, count);
+show_arr(ki, K, count);
 
 
 
 
-
-
-
-
+*/
+	count = 5;
+	ki = arr_gen(ki, "[  K  ]", K, count);
+	ki = mk_ki_info(ki, K, count);
+	opc = arr_gen(opc, "[  OPc  ]", OPc, count);
+	opc = mk_opc_info(ki, opc, OPc, count);
 
 	//show_arr(iccid, ICCID, count);
 	//show_arr(imsi, IMSI, count);
@@ -75,37 +115,6 @@ int main(){
 
 //===============기존 코드=========
 /*
-	// 데이터 입력 부분 (문자열 길이와 개수를 인자로 전달하고 문자열배열 반환
-	numbers = input_func(&length, &count);
-	if (numbers == NULL){
-		printf("데이터 입력 실패");
-		return 1;
-	}
-
-	// 데이터 초기화
-	numbers = initialized(numbers, length, count);
-	if (numbers == NULL){
-		printf("초기화 실패");
-		return 1;
-	}
-	show_arr(numbers, length, count);
-
-	// 값 채우기
-	do{ 
-		numbers = mk_sn(numbers, length, count);
-		if(numbers == NULL){
-			printf("값 채우기 실패");
-			return 1;
-		}
-
-		// 내용 확인
-		show_arr(numbers, length, count);
-
-		printf("종료하려면 0을 입력하세요");
-		scanf("%hd", &action);
-	}
-	while ( action != 0);
-
 	printf("저장합니다");
 	mk_csv(numbers, length, count);
 
@@ -115,21 +124,428 @@ int main(){
 	// 사용한 메모리 해제
 	free_str_array(numbers, length, count);
 */
+/*
 	free_str_array(sn, SN, count);
 	free_str_array(iccid, ICCID, count);
 	free_str_array(imsi, IMSI, count);
-	free_str_array(k, K, count);
+	free_str_array(ki, K, count);
 	free_str_array(opc, OPc, count);
+*/
 	return 0;
 }
 
 
 // ========== 함수 효율화
+// 임의 값으로 ki 생성함수
+char** mk_opc_info(char** ki, char **str, int len, int cnt){
+	// 일련번호 부여함수
+
+	for(int i=1; i<cnt; i++){
+		strcpy(str[i], ki[i]);
+	}
+//	char* opc;
+	strcpy(str[1], "300b000101112131415161718192a001");
+	strcpy(str[2], "300b000101112131415161718192a002");
+	strcpy(str[3], "300b000101112131415161718192a003");
+	printf("문자열 할당\n");
+	show_arr(str, len, cnt);
+	str = milenage(str, len, cnt);
+//	for(int i = 0; i < 3 ; i++){
+	printf("암호화\n");
+	show_arr(str,len,cnt);
+	printf("%s\n", str[0]);
+		//	printf("OPc : %s\n", opc);
+	//	milenage(k2_hex);
+	//	printf("OPc : %s\n", opc);
+	//	milenage(k3_hex);
+	//	printf("OPc : %s\n", opc);
+//	}
+	return str;
+}
+char** milenage(char** str, int len, int cnt){
+//char** mk_opc_info(char** ki, char **str, int len, int cnt){
+	// 일련번호 부여함수
+	char temp[33];
+    uint8_t op[16];
+    uint8_t k[16];
+	
+    const char* op_hex = "01020304050607080910111213140000";
+	for (int i=1; i<5; i++){
+
+	//	temp = str[i];
+		strcpy(temp, str[i]);
+		printf("op_hex : %s\n", op_hex);
+		printf(" k_hex : %s\n", temp);
+
+
+ 	   // Convert hex strings to byte arrays
+	   hex_to_bytes(op_hex, op, 16);	// op에 byte정보 저장
+	   hex_to_bytes(temp, k, 16);		// k에 byte 정보 저장
+
+	   // Initialize AES context
+	   struct AES_ctx ctx;
+	   AES_init_ctx(&ctx, k);
+
+	    // Encrypt OP using AES in ECB mode
+    	uint8_t encrypted_op[16];  // Allocate memory for the encrypted output
+	    memcpy(encrypted_op, op, 16); // Copy OP to encrypted_op for encryption
+	    AES_ECB_encrypt(&ctx, encrypted_op); // Encrypt in place
+
+	    // XOR operation to calculate OPc
+	    uint8_t op_c[16];
+	    for (size_t i = 0; i < 16; i++) {
+    	    op_c[i] = encrypted_op[i] ^ op[i];
+	    }
+    
+	    // Print results
+		/*    printf("          OP = ");
+	    print_hex(op, sizeof(op));
+	    printf("          K  = ");
+    	print_hex(k, sizeof(k));
+	    printf("encrypted_op = ");
+    	print_hex(encrypted_op, sizeof(encrypted_op));
+	    printf("         OPc = ");
+    	print_hex(op_c, sizeof(op_c));
+		*/
+		store_hex(temp, sizeof(temp), op_c, sizeof(op_c));
+		str[i] = temp;
+		show_arr(str, len, cnt);	
+
+	}
+	//	free(k_hex);
+	return (str);
+	
+}
+
+// 임의 값으로 ki 생성함수
+char** mk_ki_info(char **str, int len, int cnt){
+	short set_size = sizeof(HEX_SET) -1;	// 널 문자를 제외한 크기
+	printf("mk_ki_info() ki를 %d개 생성합니다. \n", cnt);
+
+	srand(time(NULL));	// 시드 초기화
+	for (int i=1; i<cnt ; i++){
+		for (int j=0; j < len ; j++){
+			str[i][j] = HEX_SET[rand() % set_size];	// 랜덤 인덱스 할당
+		}
+		str[i][len] = '\0';
+	}
+
+	// 생성한 정보 확인
+	show_arr(str, len, cnt);
+	// 데이터 수정 블록
+	str = edit_info(str, len, cnt);
+	return str;
+	
+}
+// IMSI 정보 생성
+char** mk_imsi_info(char** iccid, char** str, int len, int cnt){
+	int i, j;
+	printf("mk_imsi_info() ICCID를 기반으로 IMSI를 생성합니다. \n");
+
+	for (i=1; i<cnt; i++){
+		strcpy(str[i], PLMN);
+		for( j=5 ; j< len ; j++){	// 시작값 45040 할당
+			str[i][j] = iccid[i][j+3];
+			str[i][IMSI] = '\0';
+		}
+	}
+
+	// 생성한 IMSI 정보 확인
+	comp_arr(iccid, str, ICCID, len, cnt);
+	// 데이터 수정 블록
+	str = edit_info(str, len, cnt);
+	return str;
+}
+// ICCID 정보 생성
+char** mk_iccid_info(char** sn, char** str, int len, int cnt){
+	int i, j;
+	char temp[3];
+	int option[3];	//[0] 코어종류 [1] 현장번호 [2] 슬라이스번호
+
+	// 장비제조사 입력
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("장비제조사를 입력하세요. (1.삼성, 2.NOKIA, 3.HFR) : ");	// 시작자리를 start에 입력
+		scanf("%d", &option[0]);
+	} while ( option[1] < 0 || option[0] > 3 );	// 범위 밖이면 반복
+	// 현장번호 입력
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("몇번째로 구축한 사이트입니까? (0-99) :");	// 시작자리를 start에 입력
+		scanf("%d", &option[1]);
+	} while ( option[1] < 0 || option[1] > 99 );	// 범위 밖이면 반복
+	// 슬라이스번호 입력
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("현재 사이트의 몇번째 네트워크입니까? (0-99) :");	// 시작자리를 start에 입력
+		scanf("%d", &option[2]);
+	} while ( option[2] < 0 || option[2] > 99 );	// 범위 밖이면 반복
+
+	// 초기 ICCID 입력
+	for (i=1; i<cnt; i++){
+		for( j=0 ; j< len-2 ; j++){	// parity와 padding digit 제외 
+			if(j < 6){
+				str[i][j] = IIN[j];	// IIN 할당
+			} else if (j < 8){
+				snprintf(temp, 3, "%02d", option[0]);
+				str[i][j] = temp[j-6];
+			} else if (j < 10){
+				snprintf(temp, 3, "%02d", option[1]);
+				str[i][j] = temp[j-8];
+			} else if (j < 12){
+				snprintf(temp, 3, "%02d", option[2]);
+				str[i][j] = temp[j-10];
+			}
+			else { 
+				str[i][j] = sn[i][j-6];
+			}
+		}
+		str[i][ICCID-1] = '\0';
+	}
+
+	printf("ICCID 기본값을 생성합니다.\n");
+	// 생성한 ICCID정보 확인
+	comp_arr(sn, str, SN, len, cnt);
+
+	// 데이터 수정 블록
+	str = edit_info(str, len, cnt);
+	
+	// 패리티 비트 부여
+	for (i = 1; i<cnt; i++){
+		str[i][ICCID-2] = luhn(str[i]);
+		str[i][ICCID-1] = 'F';
+		str[i][ICCID] = '\0';
+	}
+	show_arr(str, ICCID, cnt);
+
+	return str;
+}
+// SIM카드 S/N 정보 생성
+char** mk_sn_info(char** str, int len, int cnt){
+	char temp[3];	// 수요처 이름 입력
+	time_t t = time(NULL);	// 현재 시간을 time_t 형식으로 반환
+	struct tm *local_time = localtime(&t);	// 시간정보가 포함된 tm 구조체 포인터를 반환
+	
+	printf("수요처 기호를 입력하세요.(최대 2자리) : ");
+	while(getchar() != '\n');
+	fgets(temp, 3, stdin);	// temp에 문자 2자리 입력
+	for (int j=0; j<len; j++){
+		if (temp[j] == '\n')	temp[j] = '\0';		// 입력값이 \n이면 그 자리에서 종료
+	}
+	if ( (int)strlen(temp) < (3-1) ){	// 2자리 이하가 입력되었을 때 자릿수 맞추기
+		for(int j = (int)strlen(temp) ; j < (3-1) ; j++){
+			temp[j] = ' ';
+		}
+		temp[(3-1)] = '\0';
+	}
+	// 수요처와 해당년도에 따라 일련번호 생성
+	for( int i=1; i<cnt ; i++ ){
+		snprintf(str[i], len+1, "SJ%s%02d%06d", temp, (local_time->tm_year % 100), i);
+	}
+
+	// 생성한 SIM정보 확인
+	show_arr(str, len, cnt);
+	// 데이터 수정 블록
+	str = edit_info(str, len, cnt);
+	printf(" \n");
+	return str;
+}
+
+// 배일 수정 함수
+char** edit_info(char** str, int len, int cnt){
+	int choice;
+	do {
+		printf("데이터 수정(0:종료, 1:입력값으로 대치, 2:일련번호 부여, 3. 난수부여): ");
+		scanf("%d", &choice);
+		switch (choice){	// 입력에 따라 행동 수행
+		case 1:
+			str = rep_const_value(str, len, cnt);
+			break;
+		case 2:
+			str = rep_serial_value(str, len, cnt);
+			break;
+		case 3:
+			str = rep_random_value(str, len, cnt);
+			break;
+		default :
+			break;
+		}
+		show_arr(str, len, cnt);
+	} while( choice >= 1 && choice <= 3 ) ;	// 정상 입력이면 종료
+	return str;
+}
+// 문자열의 특정 범위를 연속값으로 대치
+char** rep_random_value(char**str, int len, int cnt){
+	int start, size, end;	// 시작점, 길이, 종료점
+	char* temp;	// 대치할 임시문자열을 생성값의 최대 크기로 부여
+
+	printf("rep_random_value() 특정 자리를 임의값으로 변경합니다.\n");
+	start = get_index(len, &size, &end);	// start, end, size 결정
+	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+	if (temp == NULL)	return NULL;
+
+	if(start != 0){
+		srand(time(NULL));	// 시드 초기화
+		int set_size = sizeof(HEX_SET) -1;	// 널 문자를 제외한 크기
+		for (int i=1; i< cnt ; i++){
+			for (int j=start-1; j < end ; j++){
+				str[i][j] = HEX_SET[rand() % set_size];	// 랜덤 인덱스 할당
+			}
+		}
+	}
+	free(temp);
+	return str;
+}
+// 문자열의 특정 범위를 연속값으로 대치
+char** rep_serial_value(char**str, int len, int cnt){
+	int start, size, end;	// 시작점, 길이, 종료점
+	char* temp;	// 대치할 임시문자열을 생성값의 최대 크기로 부여
+	int i;
+	unsigned int no;
+	printf("rep_serial_value() 특정 자리를 연속값으로 변경합니다.\n");
+	start = get_index(len, &size, &end);	// start, end, size 결정
+	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+	if (temp == NULL)	return NULL;
+
+	if(start != 0){
+		printf("일련번호 시작값을 입력하세요");
+		scanf("%d", &no);	// 큰 수 입력 대비 unsigned로 입력
+		int pow = 1;
+		for(int i=0; i<size; i++){
+			pow *= 10;
+		}
+		no = no % pow;	// no의 버퍼 오버플로우 대비
+		
+		for (i=1; i<cnt; i++){	// 제목 다음행부터
+			snprintf(temp, size+1, "%0*d", size, no);
+			for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+				str[i][j] = temp[j-start+1];
+			}
+			no++;
+			if (no/pow > 0 && i+1 <cnt )	printf("\n\n주의 : %d 행에서 Buffer Overflow가 발생했습니다!!!", i+1);
+		}
+	}
+	free(temp);
+	return str;
+}
+
+// 문자열의 특정 범위를 고정값으로 대치
+char** rep_const_value(char**str, int len, int cnt){
+	int start, size, end;	// 시작점, 길이, 종료점
+	char* temp;	// 대치할 문자열 임시 저장
+	unsigned int no;
+	int i, j;
+	printf("rep_const_value() 특정 자리의 문자를 변경합니다\n");
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("변경시작할 자리를 입력하세요. (0이면 취소)");	// 시작자리를 start에 입력
+		scanf("%d", &start);
+	} while ( start < 0 || start > len );	// 문자길이보다 작아야 함
+	if (start != 0){
+		size = ( end = len ) - start + 1;	// 끝자리와 사이즈 지정
+		temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+		if (temp == NULL)	return NULL;
+
+		printf("바꿀 최대 %d자리 문자열을 입력하세요. \n" , size );
+		while (getchar() != '\n');
+		scanf("%s", temp);
+		if (strlen(temp) < size){ // 입력값이 size보다 작으면 size를 입력길이로 수정
+			size = (end=start + strlen(temp) - 1) - start + 1;	// 시작, 끝 크기 변경
+		}
+		for (i=1; i<cnt; i++){	// 제목 다음행부터
+			for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+				str[i][j] = temp[j-start+1];	// 지정 값 대치
+			}
+		}
+	}
+	free(temp);
+	printf("rep_const_value()를 종료합니다\n");
+	return str;
+}
+// 입력값에대한 시작주소, 종료주소, 길이 인덱스 계산 함수
+int get_index(int len, int *size, int *end){
+	int start;
+	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
+	do{
+		printf("get_index() 변경시작할 자리를 입력하세요. (0이면 취소)");	// 시작자리를 start에 입력
+		scanf("%d", &start);
+	} while ( start < 0 || start > len );	// 문자길이보다 작아야 함
+	if (start != 0){
+		do{
+			printf("변경할 문자 길이를 입력하세요");	// 일련번호 자릿수를 size에 입력(인덱스+1)
+			scanf("%d", size); 
+		} while ( *size < 1 );	// 문자길이가 1이하면 반복
+		*end = start + *size -1;
+		if ( *end > len){	// 끝자리가 문자길이보다 크면
+			*end = len; // 끝자리를 문자길이로 고정하고
+			*size = *end - start + 1;	// 수정문자열 크기도 변경
+		}
+	}
+	printf("start = %d, end = %d, size = %d, get_index() 종료\n", start, *end, *size);
+	return start;	// 시작값 반환(size와 end는 주소로 접근하여 직접 수정
+}
+//////////////////////////////////////////
+
+// LUHN check digit 생성 함수
+char luhn(char* data){
+    int sum = 0;
+	int check_digit;
+	int length = strlen(data);
+
+    //char* iccid="898230092200700241";  // 18자리 + 널 문자
+    //char* iccid="898240000001000018";  // 18자리 + 널 문자
+    //char* iccid="898230071700590576";  // 18자리 + 널 문자
+    //char* iccid="489016015297882";  // 18자리 + 널 문자
+    //char* iccid="451842125809300";  // 18자리 + 널 문자
+    //char* iccid="949019267903661";  // 18자리 + 널 문자
+    //char* iccid="519892000135927";  // 18자리 + 널 문자
+    //char* iccid="065002060017152";  // 18자리 + 널 문자
+    for (int j = length - 1; j >= 0; j--) {
+        int num = data[j] - '0';
+        // 오른쪽에서 두번째 자리마다 두 배로 처리
+        if ((length - j) % 2 != 0) {
+            num *= 2;
+            if (num > 9) {
+                num -= 9;
+            }
+        }
+        sum += num;
+    }
+
+	check_digit = 10 - sum % 10;
+	if (check_digit == 10){
+		check_digit = 0;
+	}
+    // 체크 디지트 계산 (10 - (합계 % 10))
+    return check_digit+48;
+}
+
+// IMSI 생성함수
+	/* ITU-T Recommendation E.212
+	3. Definition
+		3.1. home network: The network responsible for the subscription identified by the elements within the IMSI
+		3.2. international mobile subscription identity (IMSI): The IMSI is a string of decimal digits, up to a maximum length of 15 digits, which identifies a unique subscription. The IMSI consists of three fields: the mobile country code (MCC), the mobile network code (MNC), and the moblle subscription identification number (MSIN).
+		3.3. mobile country code (MCC): The MCC is the first field of the IMSI, is three digits in length and idenfifies a country. The Director of TSB may assign more than one MCC to a country. MCCs in the 90x range are non-geographic MCCs (country-agnostic) and are administreted by the Director of TSB.
+		3.4. mobile network code (MNC): The MNC is second field of the IMSI, is two or three digits in length and is administered by the respective national NPA. MNCs under MCC ranges 90x are administered by the Director of TSB. The MNC, in combination with the MCC, provides sufficient information to identify the home network.
+		3.5. mobile subscription identification number (MSIN): The MSIN is the third field of the IMSI, is up to 10 digits in length and is administered by the relevant MNC assignee to identify individual subscriptions.
+		* TSB Telecommunicaion Standardization Bureau
+	6. IMSI structure, format and assignment procedures
+		6.1 Structure and format of the IMSI
+		6.2 IMSI assignment procedures
+			6.2.3 MSINs are administred by the relevant MNC assignee in accordance with relevant national legal and regulatory environments or ITU-T Recommendation.
+			6.2.4 In principle, only one IMSI shuld be assigned to each subscription, although multiple subscriptions may be associated with a SIM/USIM/UICC/embedded SIM card.
+	Annex B
+		Principles for the assignment of mobile network codes(MNCs) within geographical MCCs
+		8) MSINs are to be assigned by the MNC assignee to their subscribed users. A user may have multiple IMSIs.
+		MNC - SK05, KT04/08, LG06
+		*/
+
 // 2개 비교해서 표출하는 함수
 void comp_arr(char** str1, char** str2, int len1 , int len2, int cnt){
+	printf("comp_arr() \n");
 	char index[50] = "1234567890123456789012345678901234567890";
 	printf("\n       ");	// S/N 출력
-	for (int j = 0; j < SN ; j++){
+	for (int j = 0; j < len1 ; j++){
 		printf("%c", index[j]);
 	}
 	printf("\t");	// ICCID 출력
@@ -140,49 +556,61 @@ void comp_arr(char** str1, char** str2, int len1 , int len2, int cnt){
 	for (int i = 0; i < cnt ; i++){
 		printf("%5d: %s\t%s\n", i, str1[i], str2[i]);
 	}
-	str2 = chg_value(str2, len2, cnt);
 
+	printf("comp_arr()을 종료합니다. \n");
 }
 
-// ICCID 생성함수
-char** gen_iccid(char** sn, char** str, int len, int cnt){
-	int i, j;
+// ICCID (Integrated Circuit Card Identifier) 생성함수
+	/* ITU-T Recommendation E.118
+	INN(6) NN(2) AAAA(4) BBBBBB(6) C(1) P(1) 
+	- INN : 89(Comm) 82(Country) NN - SK05, KT30 6NL
+	4.1. Card numbering structure
+		The maximum length of the visible card number (primary account number) shall be 19 characters and is composed of the following subparts :
+		- Major Industry Identifier;
+			(MII; "89" is assigned for telecommunication purpose(ISO/IEC 7812-1))
+		- country code;
+			(variable, 1 to 3 digits(ITU-T Rec. E.164))
+		- issuer identifier;
+			(variable, but fixed number of digits within a country or word zone where appropriate)
+			=> Issuer Identification Number(digit variable, maxium 7)
+		- individual account identification number;
+			(variable, but fixed number of digits for each particular issuer identifier number)
+		- parity check digit computed according to the Luhn formula.
 
-	for (i=1; i<cnt; i++){
-		for( j=0 ; j< ICCID-1 ; j++){	// 시작값 898200 20 할당
-			if(j <8){
-				str[i][j] = ICCID_HDR[j];
-			} else {
-				str[i][j] = sn[i][j-6];
-			}
-			str[i][ICCID-1] = '\0';
-		}
-	}
-
-	comp_arr(sn, str, SN, len, cnt);
-	// Check Digit 할당
-
-	return str;
-}
+	* 즉 INN에서 89 기존할당, 82(대한민국) 00(by company)
+		 individual account identificaion number(12자리) 규칙 (기존 SIM 등)
+			- NN : Codeshare No.(SA : 11)
+			- AAAA : Company S/N
+			- BBBBBB : Subscriber S/N
+		  C : Check digit by Luhn Algorithm
+		  P : padding('F', optional)
+		ex. KT LTE : 898230 07 1700 590576 2F
+     	 		?? : 898240 00 0001 000018 7F
+			MVNO_KT: 898230 09 2200 700241 6F
+	*/
 // 에러없이 끝나는 자릿수 확인
 
-int get_addr(int len, int *size, int *end){
+int get_addr_legacy(int len, int *size, int *end){
 	int start;
 	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
 	do{
-		printf("변경값의 시작 위치를 입력하세요");	// 시작자리를 start에 입력
+		printf("get_addr_legacy() 변경값의 시작 위치를 입력하세요");	// 시작자리를 start에 입력
 		scanf("%d", &start);
-	} while ( start < 1 || start > len );
-	
-	do{
-		printf("문자 길이를 입력하세요");	// 일련번호 자릿수를 size에 입력(인덱스+1)
-		scanf("%d", size); 
-	} while ( *size < 1 );
-	*end = start + *size -1;
-	if ( *end > len){	// 끝나는 자리가 length보다 크면
-		*end = len; // 끝자리를 length로 고정
-		*size = *end - start +1;	// 따라서 사이즈도 수정
+	} while ( start < 0 || start > len );
+	if (start == 0){
+		printf("%d가 입력되어 종료합니다", start);
+	} else{
+		do{
+			printf("문자 길이를 입력하세요");	// 일련번호 자릿수를 size에 입력(인덱스+1)
+			scanf("%d", size); 
+		} while ( *size < 1 );
+		*end = start + *size -1;
+		if ( *end > len){	// 끝나는 자리가 length보다 크면
+			*end = len; // 끝자리를 length로 고정
+			*size = *end - start +1;	// 따라서 사이즈도 수정
+		}
 	}
+	printf("get_addr_legacy() 종료\n");
 	return start;
 }
 
@@ -192,27 +620,29 @@ char** chg_value(char**str, int len, int cnt){
 	int start, size, end;
 	unsigned int no;
 	int i, j;
-
-	start = get_addr(len, &size, &end);	// start, end, size 확인
-	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
-	if (temp == NULL)	return NULL;
-	printf("선택한 자리를 특정 문자열로 대치합니다\n");
-	printf("문자열을 입력하세요");
-	while (getchar() != '\n');
-	scanf("%s", temp);
-	if (strlen(temp) < size){ // temp가 size보다 작으면
-		for(i=0, j=strlen(temp); j < size ; i++, j++){
-			temp[j] = temp[i];
+	printf("chg_value() 특정 자리의 문자를 변경합니다\n");
+	start = get_addr_legacy(len, &size, &end);	// start, end, size 확인
+	if(start != 0){
+		temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+		if (temp == NULL)	return NULL;
+		printf("선택한 자리를 특정 문자열로 대치합니다\n");
+		printf("문자열을 입력하세요");
+		while (getchar() != '\n');
+		scanf("%s", temp);
+		if (strlen(temp) < size){ // temp가 size보다 작으면
+			for(i=0, j=strlen(temp); j < size ; i++, j++){
+				temp[j] = temp[i];
+			}
+			temp[size] = '\0';
 		}
-		temp[size] = '\0';
-	}
-	for (i=1; i<cnt; i++){	// 제목열 제거
-		for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
-			str[i][j] = temp[j-start+1];
+		for (i=1; i<cnt; i++){	// 제목열 제거
+			for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+				str[i][j] = temp[j-start+1];
+			}
 		}
 	}
 	while (getchar() != '\n');	// scanf 입력의 개행문자 제거
-
+	printf("chg_value()를 종료합니다\n");
 	return str;
 }
 
@@ -224,63 +654,36 @@ char** fill_sn(char**str, int len, int cnt){
 	int i, j;
 	
 	while(getchar() != '\n');	// 하나의 문자를 반복 읽으면서 개행문자이면 버퍼를 비우고 종료
-	printf("일련번호 시작값을 입력하세요");
+	printf("fill_sn() 일련번호를 생성합니다. 시작값을 입력하세요");
 	scanf("%d", &no);	// 큰 수 입력 대비 unsigned로 입력
+	start = get_addr_legacy(len, &size, &end);	// start, end, size 확인
+	if(start != 0) {
+		temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
+		printf("선택한 %d 자리부터 일련번호로 대치합니다. 시작값을 입력하세요", start);
+		if (temp == NULL)	return NULL;
 
-	start = get_addr(len, &size, &end);	// start, end, size 확인
-	temp = str_alloc(size);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
-	printf("선택한 %d 자리부터 일련번호로 대치합니다. 시작값을 입력하세요", start);
-	if (temp == NULL)	return NULL;
-
-	for (i=1; i<cnt; i++){	// 제목열 제거
-		snprintf(temp, size+1, "%0*d", size, no);
-		for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
-			str[i][j] = temp[j-start+1];
+		for (i=1; i<cnt; i++){	// 제목열 제거
+			snprintf(temp, size+1, "%0*d", size, no);
+			for (int j=start-1 ; j < end ; j++){	// 인덱스 만들기 위해 -1
+				str[i][j] = temp[j-start+1];
+			}
+			no++;
 		}
-		no++;
+		free(temp);
+	} else {
+		printf("%d이 입력되어 fill()을 종료합니다\n", start);
 	}
-	free(temp);
-
 	return str;
 }
 // 시리얼 번호 세팅하기
-char** set_sn(char** str, int len, int cnt){
-	char* temp;
-	temp = str_alloc(len);	// 자릿수만큼 문자열공간 할당(실제로는 \0포함 size+1)
-	if (temp == NULL) return NULL;
+	/* 12자리 중 SJ YY NN BBBBBB
+		SJ : 공통
+		YY : 발행년도
+		NN : 네트워크(수요처)
+		BBBBBB : 일련번호
+	*/
 
-	printf("S/N 번호(%d 문자) 초기값을 입력하세요. : ", len);
-	while(getchar() != '\n');	// 하나의 문자를 반복 읽으면서 개행문자이면 버퍼를 비우고 종료
-	if( fgets(temp, len+1, stdin) != NULL) { 	// fgets로 \0포함 입력받고 null이 아니면
-		for (int i=0; i<len; i++){
-			if (temp[i] == '\n')	// 입력된 temp의 각 자리를 확인
-				temp[i] = '\0';		// \n(엔터)가 입력되었으면 그자리를 종료로
-			if (temp[i] == '\0')	// 입력이 종료이면
-				temp[i] = '_';	// 그자리를 '_'으로 채우기
-		}
-		temp[len] = '\0';	// length +1 번째 값은 종료문자
-	} else{
-		return NULL;	// 할당 실패시 NULL 반환
-	}
-	// 메모리 temp 해제
-	/*size = strlen(temp);
-	end = start + size -1;
-	if ( end > len){	// 끝나는 자리가 length보다 크면
-		end = len; // 끝자리를 length로 고정
-		size = end - start +1;	// 따라서 사이즈도 수정
-	}
-*/
-	for (int i=1; i<cnt ; i++){
-		strcpy(str[i], temp);
-	}
-	show_arr(str, len, cnt);
-	str = fill_sn(str, len, cnt);	// 일련번호 부여
-	show_arr(str, len, cnt);
-	// do-while()	
-	str = chg_value(str, len, cnt);
 
-	return str;
-}
 char** arr_gen(char **arr, char *name, int len, int cnt){
 	arr = str_array_alloc(len, cnt);
 	if (arr == NULL) return NULL;
