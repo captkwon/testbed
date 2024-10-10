@@ -74,10 +74,25 @@ int main(){
 	//error = mk_opc_info(ki, opc, KOP/2, op);
 	error = mk_opc_info(opb, KOP/2, ki, opc);
 
+	comp_arr(ki, KOP, opc, KOP);
 
 	// Test
 	error = save(sn, iccid, imsi, ki, opc, op);
 	help();
+	for( int i = cnt; i >= 0 ; i--){
+		free(sn[i]);
+		free(iccid[i]);
+		free(imsi[i]);
+		free(ki[i]);
+		free(opc[i]);
+	}
+	free(sn);
+	free(iccid);
+	free(imsi);
+	free(ki);
+	free(opc);
+	free(op);
+
 	return 0;
 }
 
@@ -180,6 +195,8 @@ int mk_op(char* str, int len, char *sn, char *iccid, uint8_t *opb){
 		if (choice == 1) {	// 변경할 경우 
 			char temp[KOP+1];	// null 포함 33자 저장 공간
 			printf("바꿀 %d자리 HEX값을 입력하세요. : " , KOP );
+			// 0x53 0x4a 0x35 0x47 0x5f 0x4b 0x4f 0x4c 0x4f 0x4e 0x47 0x4c 0x4f 0x42 0x41 0x4c
+			printf("SJ5G_KOLONGLOBAL (ASCII) : 53 4a 35 47 5f 4b 4f 4c 4f 4e 47 4c 4f 42 41 4c \n");
 			fgets(temp, sizeof(temp), stdin);
 			temp[strcspn(temp, "\n")] = '\0';	// 개행 문자 포함시 제거
 			if ( strlen(temp) != KOP){	// OP가 짧을 경우
@@ -252,7 +269,6 @@ int mk_imsi_n_ki(char** imsi, char** ki, char **iccid){
 	printf("IMSI를 ");
 	int error = edit_value(imsi, IMSI);
 
-	comp_arr(imsi, IMSI, ki, KOP);
 	printf("Ki를 ");
 	error = edit_value(ki, KOP); 
 
@@ -351,9 +367,6 @@ int mk_iccid_info(char **iccid, int len, char **sn){
 	    // 체크 디지트 계산 (10 - (합계 % 10))
 	    return check_digit+48;
 	}
-
-
-
 
 // 배열을 입력받고 Serial No.를 생성하여 채우는 함수
 int mk_sn_info(char** sn, int len){
